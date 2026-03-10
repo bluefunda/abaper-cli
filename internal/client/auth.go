@@ -52,7 +52,7 @@ func RequestDeviceCode(realm string) (*DeviceAuthResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request device code: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		var authErr AuthErrorResponse
@@ -93,7 +93,7 @@ func PollForToken(realm, deviceCode string, interval int) (*TokenResponse, error
 		if resp.StatusCode == http.StatusOK {
 			var token TokenResponse
 			err := json.NewDecoder(resp.Body).Decode(&token)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if err != nil {
 				return nil, fmt.Errorf("decode token: %w", err)
 			}
@@ -102,7 +102,7 @@ func PollForToken(realm, deviceCode string, interval int) (*TokenResponse, error
 
 		var authErr AuthErrorResponse
 		_ = json.NewDecoder(resp.Body).Decode(&authErr)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		switch authErr.Error {
 		case "authorization_pending", "slow_down":
@@ -135,7 +135,7 @@ func RefreshAccessToken(realm, refreshToken string) (*TokenResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("refresh token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("token refresh failed (status %d)", resp.StatusCode)

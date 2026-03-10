@@ -98,7 +98,7 @@ func (c *Client) Do(method, path string, body any) (*http.Response, error) {
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
 			time.Sleep(time.Duration(attempt+1) * time.Second)
 			continue
@@ -116,7 +116,7 @@ func Post[T any](c *Client, path string, body any) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		text, _ := io.ReadAll(resp.Body)
@@ -141,7 +141,7 @@ func Get[T any](c *Client, path string) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		text, _ := io.ReadAll(resp.Body)
@@ -162,7 +162,7 @@ func (c *Client) HealthCheck() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result map[string]string
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -190,7 +190,7 @@ func (c *Client) SystemConnect(sapHost, sapClient, sapUser, sapPassword string) 
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		text, _ := io.ReadAll(resp.Body)
