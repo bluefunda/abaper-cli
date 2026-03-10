@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release-please:
+    uses: bluefunda/release-foundry/.github/workflows/release-please.yml@main
+    with:
+      release-type: go
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+
+  goreleaser:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: bluefunda/release-foundry/.github/workflows/go-binary-release.yml@main
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+
+  docker:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: bluefunda/release-foundry/.github/workflows/docker-deploy.yml@main
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+      image-name: abaper
+      build-args: |
+        VERSION=${{ needs.release-please.outputs.tag_name }}
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_HUB_BDAOSS }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_HUB_BDAOSS_TOKEN }}
+      GH_PAT: ${{ secrets.GH_PAT }}

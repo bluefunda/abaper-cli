@@ -1,0 +1,292 @@
+package client
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/bluefunda/abaper-cli/internal/config"
+)
+
+// APIResponse is the standard response envelope from ABAPer APIs.
+type APIResponse[T any] struct {
+	Success bool   `json:"success"`
+	Data    T      `json:"data"`
+	Error   string `json:"error,omitempty"`
+}
+
+// Client communicates with ABAPer APIs exposed via abaper-gw.
+type Client struct {
+	BaseURL    string
+	Token      string
+	Realm      string
+	HTTPClient *http.Client
+}
+
+// NewClient creates a Client from the current config and stored tokens.
+func NewClient() (*Client, error) {
+	cfg := config.Load()
+
+	tokens, err := config.LoadTokens()
+	if err != nil {
+		return nil, fmt.Errorf("not logged in — run 'abaper login' first")
+	}
+
+	// Refresh if expired
+	if time.Now().UnixMilli() >= tokens.ExpiresAt {
+		refreshed, err := RefreshAccessToken(cfg.Realm, tokens.RefreshToken)
+		if err != nil {
+			return nil, fmt.Errorf("session expired — run 'abaper login' again: %w", err)
+		}
+		tokens = &config.Tokens{
+			AccessToken:  refreshed.AccessToken,
+			RefreshToken: refreshed.RefreshToken,
+			ExpiresAt:    time.Now().Add(time.Duration(refreshed.ExpiresIn) * time.Second).UnixMilli(),
+		}
+		if err := config.SaveTokens(tokens); err != nil {
+			return nil, fmt.Errorf("save refreshed tokens: %w", err)
+		}
+	}
+
+	return &Client{
+		BaseURL: cfg.BaseURL,
+		Token:   tokens.AccessToken,
+		Realm:   cfg.Realm,
+		HTTPClient: &http.Client{
+			Timeout: 60 * time.Second,
+		},
+	}, nil
+}
+
+// Do sends an HTTP request with auth headers, retry logic, and structured error handling.
+func (c *Client) Do(method, path string, body any) (*http.Response, error) {
+	var bodyReader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal request: %w", err)
+		}
+		bodyReader = bytes.NewReader(data)
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		req, err := http.NewRequest(method, c.BaseURL+"/abaper"+path, bodyReader)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+		req.Header.Set("X-Realm", c.Realm)
+
+		// Reset body reader for retries
+		if body != nil {
+			data, _ := json.Marshal(body)
+			bodyReader = bytes.NewReader(data)
+			req.Body = io.NopCloser(bodyReader)
+		}
+
+		resp, err := c.HTTPClient.Do(req)
+		if err != nil {
+			lastErr = err
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+			continue
+		}
+
+		return resp, nil
+	}
+
+	return nil, fmt.Errorf("request failed after retries: %w", lastErr)
+}
+
+// Post sends a POST request and decodes the response into the target type.
+func Post[T any](c *Client, path string, body any) (*T, error) {
+	resp, err := c.Do(http.MethodPost, path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		text, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(text))
+	}
+
+	var apiResp APIResponse[T]
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if !apiResp.Success {
+		return nil, fmt.Errorf("API error: %s", apiResp.Error)
+	}
+
+	return &apiResp.Data, nil
+}
+
+// Get sends a GET request and decodes the response.
+func Get[T any](c *Client, path string) (*T, error) {
+	resp, err := c.Do(http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		text, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(text))
+	}
+
+	var apiResp APIResponse[T]
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &apiResp.Data, nil
+}
+
+// HealthCheck calls the health endpoint.
+func (c *Client) HealthCheck() (map[string]string, error) {
+	resp, err := c.Do(http.MethodGet, "/health", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SystemConnect tests SAP system connectivity.
+func (c *Client) SystemConnect(sapHost, sapClient, sapUser, sapPassword string) error {
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/abaper/api/v1/system/connect", nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("X-Realm", c.Realm)
+	req.Header.Set("X-SAP-Host", sapHost)
+	req.Header.Set("X-SAP-Client", sapClient)
+	req.Header.Set("X-SAP-User", sapUser)
+	req.Header.Set("X-SAP-Password", sapPassword)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		text, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("connect failed (%d): %s", resp.StatusCode, string(text))
+	}
+
+	return nil
+}
+
+// SearchObjects searches for ABAP objects by pattern.
+func (c *Client) SearchObjects(pattern, objectType string) ([]map[string]any, error) {
+	body := map[string]string{"object_name": pattern}
+	if objectType != "" {
+		body["object_type"] = objectType
+	}
+
+	type SearchResult struct {
+		Objects []map[string]any `json:"Objects"`
+	}
+
+	result, err := Post[SearchResult](c, "/api/v1/objects/search", body)
+	if err != nil {
+		return nil, err
+	}
+	return result.Objects, nil
+}
+
+// GetObject retrieves an ABAP object's source code.
+func (c *Client) GetObject(objectType, objectName string) (*map[string]any, error) {
+	body := map[string]string{
+		"object_type": objectType,
+		"object_name": objectName,
+	}
+	return Post[map[string]any](c, "/api/v1/objects/get", body)
+}
+
+// CreateObject saves an ABAP object with source code.
+func (c *Client) CreateObject(objectName, objectType, source string) error {
+	body := map[string]string{
+		"object_name": objectName,
+		"object_type": objectType,
+		"source":      source,
+	}
+	_, err := Post[map[string]any](c, "/api/v1/objects/create", body)
+	return err
+}
+
+// Activate activates an ABAP object.
+func (c *Client) Activate(objectName, objectType string) (*map[string]any, error) {
+	body := map[string]string{
+		"object_name": objectName,
+		"object_type": objectType,
+	}
+	return Post[map[string]any](c, "/api/v1/activate", body)
+}
+
+// SyntaxCheck runs syntax validation on source code.
+func (c *Client) SyntaxCheck(objectName, objectType, source string) (*map[string]any, error) {
+	body := map[string]string{
+		"object_name": objectName,
+		"object_type": objectType,
+		"source":      source,
+	}
+	return Post[map[string]any](c, "/api/v1/syntax-check", body)
+}
+
+// FormatCode formats ABAP source code.
+func (c *Client) FormatCode(source string) (string, error) {
+	body := map[string]string{"source": source}
+	type FormatResult struct {
+		Source string `json:"source"`
+	}
+	result, err := Post[FormatResult](c, "/api/v1/format", body)
+	if err != nil {
+		return "", err
+	}
+	return result.Source, nil
+}
+
+// TransportInfo retrieves transport request information.
+func (c *Client) TransportInfo() (*map[string]any, error) {
+	return Post[map[string]any](c, "/api/v1/transports/info", nil)
+}
+
+// CreateTransport creates a transport request.
+func (c *Client) CreateTransport(description, targetPackage string) (string, error) {
+	body := map[string]string{
+		"description": description,
+		"package":     targetPackage,
+	}
+	type Result struct {
+		Transport string `json:"transport"`
+	}
+	result, err := Post[Result](c, "/api/v1/transports/create", body)
+	if err != nil {
+		return "", err
+	}
+	return result.Transport, nil
+}
