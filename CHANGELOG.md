@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/bluefunda/abaper-cli/compare/v1.1.0...v1.1.1) (2026-03-11)
+
+
+### Bug Fixes
+
+* use homebrew_casks, HOMEBREW_TAP_TOKEN, and correct DOCKERHUB_TOKEN ([#6](https://github.com/bluefunda/abaper-cli/issues/6)) ([7dc3984](https://github.com/bluefunda/abaper-cli/commit/7dc39846a9555bbc02081b84c316fcb33448bb51))
+
 ## [1.1.0](https://github.com/bluefunda/abaper-cli/compare/v1.0.1...v1.1.0) (2026-03-11)
 
 
