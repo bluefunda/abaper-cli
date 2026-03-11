@@ -32,20 +32,18 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-brews:
+homebrew_casks:
   - repository:
       owner: bluefunda
       name: homebrew-tap
-      token: "{{ .Env.GH_PAT }}"
-    directory: Formula
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
     homepage: "https://abaper.bluefunda.com"
     description: "Command line interface for the ABAPer platform"
-    license: "MIT"
-    install: |
-      bin.install "abaper"
-      man1.install "man/abaper.1"
-    test: |
-      system "#{bin}/abaper", "version"
+    binaries:
+      - abaper
+    manpages:
+      - man/abaper.1
 
 changelog:
   use: github-native
