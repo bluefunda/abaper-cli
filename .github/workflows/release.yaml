@@ -75,7 +75,7 @@ jobs:
           build-args: |
             VERSION=${{ needs.release-please.outputs.tag_name }}
           tags: |
-            ${{ secrets.DOCKERHUB_USER }}/abaper:${{ needs.release-please.outputs.tag_name }}
-            ${{ secrets.DOCKERHUB_USER }}/abaper:latest
+            bluefunda/abaper:${{ needs.release-please.outputs.tag_name }}
+            bluefunda/abaper:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
