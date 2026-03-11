@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/bluefunda/abaper-cli/compare/v1.0.0...v1.0.1) (2026-03-11)
+
+
+### Bug Fixes
+
+* push Docker image to bluefunda/abaper and add manual deploy workflow ([5b042c1](https://github.com/bluefunda/abaper-cli/commit/5b042c1db6680093b515f7106e02778fc0831881))
+
 ## 1.0.0 (2026-03-11)
 
 
