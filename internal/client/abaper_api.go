@@ -1,11 +1,14 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bluefunda/abaper-cli/internal/config"
@@ -289,4 +292,184 @@ func (c *Client) CreateTransport(description, targetPackage string) (string, err
 		return "", err
 	}
 	return result.Transport, nil
+}
+
+// GatewayVersion retrieves the gateway version.
+func (c *Client) GatewayVersion() (map[string]string, error) {
+	resp, err := c.Do(http.MethodGet, "/version", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// ListObjects lists ABAP objects in a package.
+func (c *Client) ListObjects(packageName, objectType string) ([]map[string]any, error) {
+	body := map[string]string{}
+	if packageName != "" {
+		body["package"] = packageName
+	}
+	if objectType != "" {
+		body["object_type"] = objectType
+	}
+
+	type ListResult struct {
+		Objects []map[string]any `json:"Objects"`
+	}
+
+	result, err := Post[ListResult](c, "/api/v1/objects/list", body)
+	if err != nil {
+		return nil, err
+	}
+	return result.Objects, nil
+}
+
+// RunUnitTests executes ABAP unit tests for an object.
+func (c *Client) RunUnitTests(objectName, objectType string) (*map[string]any, error) {
+	body := map[string]string{
+		"object_name": objectName,
+		"object_type": objectType,
+	}
+	return Post[map[string]any](c, "/api/v1/unit-tests", body)
+}
+
+// Completion retrieves code completion suggestions.
+func (c *Client) Completion(objectName, objectType, source string, line, column int) (*map[string]any, error) {
+	body := map[string]any{
+		"object_name": objectName,
+		"object_type": objectType,
+		"source":      source,
+		"line":        line,
+		"column":      column,
+	}
+	return Post[map[string]any](c, "/api/v1/completion", body)
+}
+
+// Navigation retrieves code navigation (go-to-definition) results.
+func (c *Client) Navigation(objectName, objectType, source string, line, column int) (*map[string]any, error) {
+	body := map[string]any{
+		"object_name": objectName,
+		"object_type": objectType,
+		"source":      source,
+		"line":        line,
+		"column":      column,
+	}
+	return Post[map[string]any](c, "/api/v1/navigation", body)
+}
+
+// PackageContents lists the contents of a package.
+func (c *Client) PackageContents(packageName string) ([]map[string]any, error) {
+	body := map[string]string{
+		"package": packageName,
+	}
+
+	type PkgResult struct {
+		Objects []map[string]any `json:"Objects"`
+	}
+
+	result, err := Post[PkgResult](c, "/api/v1/packages/contents", body)
+	if err != nil {
+		return nil, err
+	}
+	return result.Objects, nil
+}
+
+// ChatEvent represents a single event from the AI chat SSE stream.
+type ChatEvent struct {
+	Type          string `json:"type"`
+	Content       string `json:"content,omitempty"`
+	FullContent   string `json:"full_content,omitempty"`
+	Error         string `json:"error,omitempty"`
+	Message       string `json:"message,omitempty"`
+	SessionID     string `json:"session_id,omitempty"`
+	ToolName      string `json:"tool_name,omitempty"`
+	Status        string `json:"status,omitempty"`
+	DurationMs    int    `json:"duration_ms,omitempty"`
+	ResultSummary string `json:"result_summary,omitempty"`
+}
+
+// ChatRequest is the request body for AI chat.
+type ChatRequest struct {
+	Prompt    string `json:"prompt"`
+	Model     string `json:"model"`
+	AgentName string `json:"agentName"`
+	IsNewChat bool   `json:"isNewChat"`
+}
+
+// StreamChat sends a prompt to the AI chat endpoint and streams SSE events.
+func (c *Client) StreamChat(ctx context.Context, chatID string, req ChatRequest, handler func(ChatEvent)) error {
+	data, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal chat request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.BaseURL+"/abaper/ai/chats/"+chatID, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	httpReq.Header.Set("X-Realm", c.Realm)
+
+	sseClient := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := sseClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("chat request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		text, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("chat API error %d: %s", resp.StatusCode, string(text))
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		payload := strings.TrimPrefix(line, "data: ")
+		if payload == "[DONE]" {
+			break
+		}
+
+		var event ChatEvent
+		if err := json.Unmarshal([]byte(payload), &event); err != nil {
+			continue
+		}
+		handler(event)
+
+		if event.Type == "stream_end" || event.Type == "error" || event.Type == "stream_error" {
+			break
+		}
+	}
+
+	return scanner.Err()
+}
+
+// ChatTitle generates a title for a chat session.
+func (c *Client) ChatTitle(chatID, prompt string) (string, error) {
+	body := map[string]string{"prompt": prompt}
+	type TitleResult struct {
+		GeneratedTitle string `json:"generatedTitle"`
+		Title          string `json:"title"`
+	}
+	result, err := Post[TitleResult](c, "/ai/chats/"+chatID+"/title", body)
+	if err != nil {
+		return "", err
+	}
+	if result.GeneratedTitle != "" {
+		return result.GeneratedTitle, nil
+	}
+	return result.Title, nil
 }
