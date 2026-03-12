@@ -43,6 +43,19 @@ See
 .BR abaper\-deploy (1)
 for details.
 .TP
+.B test
+Run ABAP unit tests for an object on the target system.
+.TP
+.B list objects
+List ABAP objects, optionally filtered by package or type.
+.TP
+.B list packages
+List contents of an ABAP package.
+.TP
+.B ai chat
+Send a prompt to the ABAPer AI assistant and stream the response.
+Supports context injection from ABAP source files and session resumption.
+.TP
 .B version
 Print the CLI version.
 .SH GLOBAL FLAGS
@@ -86,6 +99,37 @@ Object type:
 .TP
 .BI \-\-source\-file " path"
 Path to ABAP source file (required).
+.SH AI CHAT FLAGS
+.TP
+.BI \-\-model " model"
+LLM model to use (default:
+.IR groq ).
+.TP
+.BI \-\-context\-file " path"
+ABAP source file to include as context with the prompt.
+.TP
+.BI \-\-chat\-id " id"
+Resume an existing chat session. If omitted, a new session is created.
+.SH TEST FLAGS
+.TP
+.BI \-\-name " name"
+Object name (required).
+.TP
+.BI \-\-type " type"
+Object type:
+.BR class " or " program
+(default:
+.IR class ).
+.SH LIST FLAGS
+.TP
+.BI \-\-package " name"
+Filter objects by package name (list objects).
+.TP
+.BI \-\-type " type"
+Filter objects by type (list objects).
+.TP
+.BI \-\-name " name"
+Package name (list packages, required).
 .SH AUTHENTICATION
 ABAPer CLI uses the OAuth2 device authorization flow via Keycloak
 (same flow as the ABAPer VS Code extension):
@@ -156,6 +200,33 @@ Create and deploy an ABAP program:
 .nf
 abaper generate \-\-type program \-\-name ZMY_REPORT
 abaper deploy \-\-type program \-\-name ZMY_REPORT \-\-source\-file report.abap
+.fi
+.RE
+.PP
+AI-assisted development:
+.PP
+.RS 4
+.nf
+abaper ai chat "Explain SELECT FOR ALL ENTRIES"
+abaper ai chat "Optimize this code" \-\-context\-file program.abap
+abaper ai chat "What about performance?" \-\-chat\-id <previous\-id>
+.fi
+.RE
+.PP
+Run unit tests:
+.PP
+.RS 4
+.nf
+abaper test \-\-type class \-\-name ZCL_MY_CLASS
+.fi
+.RE
+.PP
+List objects and packages:
+.PP
+.RS 4
+.nf
+abaper list objects \-\-package ZDEV
+abaper list packages \-\-name ZDEV
 .fi
 .RE
 .PP

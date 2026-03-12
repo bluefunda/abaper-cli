@@ -129,6 +129,72 @@ abaper deploy --type program --name ZMY_PROGRAM --source-file program.abap
 | `--type`        | No       | `program` | Object type: program, class, interface |
 | `--source-file` | Yes      | —         | Path to ABAP source file           |
 
+### `abaper test`
+
+Run ABAP unit tests for an object on the target SAP system.
+
+```bash
+abaper test --type class --name ZCL_MY_CLASS
+abaper test --type class --name ZCL_MY_CLASS -o json
+```
+
+**Flags:**
+
+| Flag     | Required | Default | Description                  |
+|----------|----------|---------|------------------------------|
+| `--name` | Yes      | —       | Object name                  |
+| `--type` | No       | `class` | Object type: class, program  |
+
+### `abaper list objects`
+
+List ABAP objects, optionally filtered by package or type.
+
+```bash
+abaper list objects --package ZDEV
+abaper list objects --type program
+```
+
+**Flags:**
+
+| Flag        | Required | Default | Description               |
+|-------------|----------|---------|---------------------------|
+| `--package` | No       | —       | Filter by package name    |
+| `--type`    | No       | —       | Filter by object type     |
+
+### `abaper list packages`
+
+List contents of an ABAP package.
+
+```bash
+abaper list packages --name ZDEV
+```
+
+### `abaper ai chat`
+
+Send a prompt to the ABAPer AI assistant and stream the response. Supports including ABAP source files as context and resuming existing chat sessions.
+
+```bash
+# Ask a question
+abaper ai chat "Explain SELECT FOR ALL ENTRIES in ABAP"
+
+# Include source context
+abaper ai chat "Optimize this code" --context-file program.abap
+
+# Resume a previous chat
+abaper ai chat "What about performance?" --chat-id <previous-chat-id>
+
+# JSON output for scripting
+abaper ai chat "Review this code" --context-file report.abap -o json
+```
+
+**Flags:**
+
+| Flag              | Required | Default | Description                          |
+|-------------------|----------|---------|--------------------------------------|
+| `--model`         | No       | `groq`  | LLM model to use                     |
+| `--context-file`  | No       | —       | ABAP source file to include as context |
+| `--chat-id`       | No       | —       | Resume an existing chat session      |
+
 ### `abaper version`
 
 Print the CLI version.

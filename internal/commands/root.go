@@ -30,6 +30,9 @@ func init() {
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(aiCmd)
+	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(listCmd)
 }
 
 func Execute() error {
