@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/bluefunda/abaper-cli/compare/v1.2.0...v1.2.1) (2026-03-13)
+
+
+### Bug Fixes
+
+* switch from Homebrew cask to formula to avoid macOS Gatekeeper ([#11](https://github.com/bluefunda/abaper-cli/issues/11)) ([cd07ae7](https://github.com/bluefunda/abaper-cli/commit/cd07ae7a17ecf9e907ae40420e94f6654e1a0b94))
+
 ## [1.2.0](https://github.com/bluefunda/abaper-cli/compare/v1.1.1...v1.2.0) (2026-03-13)
 
 
