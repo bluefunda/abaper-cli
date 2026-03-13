@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/bluefunda/abaper-cli/compare/v1.1.1...v1.2.0) (2026-03-13)
+
+
+### Features
+
+* add AI chat, unit tests, list, and missing gateway API coverage ([#8](https://github.com/bluefunda/abaper-cli/issues/8)) ([96f6436](https://github.com/bluefunda/abaper-cli/commit/96f643628173bd9c83bff085c78c69b09390e190))
+
+
+### Bug Fixes
+
+* use RELEASE_PAT secret for release-please workflow ([#9](https://github.com/bluefunda/abaper-cli/issues/9)) ([62be342](https://github.com/bluefunda/abaper-cli/commit/62be34238745ecf1a00817d5cfc492062ba29a99))
+
 ## [1.1.1](https://github.com/bluefunda/abaper-cli/compare/v1.1.0...v1.1.1) (2026-03-11)
 
 
